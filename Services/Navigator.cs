@@ -7,6 +7,7 @@ public static class Navigator
     // Canonical Cardon URIs (giữ kmy:// để tương thích bản cũ)
     public const string DashboardUri = "cardon://dashboard";
     public const string AboutUri = "cardon://about";
+    public const string CacheUri = "cardon://cache";
     public const string BlankUri = "about:blank";
 
     private const string LegacyDashboard = "kmy://dashboard";
@@ -32,6 +33,7 @@ public static class Navigator
         input = NormalizeInternal(input);
         if (string.Equals(input, DashboardUri, StringComparison.OrdinalIgnoreCase)) return DashboardUri;
         if (string.Equals(input, AboutUri, StringComparison.OrdinalIgnoreCase)) return AboutUri;
+        if (string.Equals(input, CacheUri, StringComparison.OrdinalIgnoreCase)) return CacheUri;
         if (input.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             input.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             return input;

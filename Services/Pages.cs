@@ -62,4 +62,48 @@ h1{margin-bottom:8px;font-size:26px}a{color:#fbbf24}.v{color:#9ca3af;font-size:1
 <br><p>Inspired by KMY-Browser concept, rebuilt independently as Cardon with its own identity.</p>
 </div></body></html>
 """;
+
+    public static string CachePage(
+        double resolveHitRate, int resolveHits, int resolveMisses,
+        int fpHits, int fpMisses, int scrollRestores,
+        IReadOnlyList<ReuseGraph.PageReuse> pages, string cprSection)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var p in pages)
+        {
+            string shortUrl = p.Url.Length > 60 ? p.Url.Substring(0, 60) + "..." : p.Url;
+            sb.Append("<tr><td>").Append(HtmlEscape(shortUrl)).Append("</td>")
+              .Append("<td><code>").Append(HtmlEscape(p.Fingerprint)).Append("</code></td>")
+              .Append("<td>").Append(p.ScrollX).Append(",").Append(p.ScrollY).Append("</td>")
+              .Append("<td>").Append(p.SeenAt.ToString("HH:mm:ss")).Append("</td></tr>\n");
+        }
+        string rows = sb.ToString();
+        if (string.IsNullOrWhiteSpace(rows))
+            rows = "<tr><td colspan=\"4\" style=\"opacity:.6\">Chua co page nao - duyet vai trang roi mo lai.</td></tr>";
+        int total = resolveHits + resolveMisses;
+        return "<!DOCTYPE html><html lang=\"vi\"><head><meta charset=\"utf-8\">"
+            + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+            + "<title>Reuse Graph - Cardon</title>"
+            + "<style>body{font-family:'Segoe UI',Arial;background:#0b0d12;color:#e5e7eb;display:flex;justify-content:center;padding:32px}"
+            + ".card{max-width:760px;width:100%;background:#141a24;border:1px solid rgba(245,158,11,.3);border-radius:18px;padding:28px}"
+            + "h1{font-size:22px;margin-bottom:4px}.sub{color:#9ca3af;font-size:13px;margin-bottom:16px}"
+            + ".kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px}"
+            + ".k{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px}"
+            + ".k b{display:block;color:#fbbf24;font-size:20px}.k span{font-size:12px;opacity:.75}"
+            + "table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{text-align:left;padding:8px;border-bottom:1px solid rgba(255,255,255,.08)}"
+            + "code{background:rgba(245,158,11,.15);color:#fcd34d;padding:2px 8px;border-radius:6px}</style></head><body>"
+            + "<div class=\"card\"><h1>Computational Reuse Graph</h1>"
+            + "<div class=\"sub\">Cache ket qua tinh toan trong RAM - fingerprint khop thi bo qua re-style, back/forward khoi phuc tuc thi.</div>"
+            + "<div class=\"kpi\">"
+            + "<div class=\"k\"><b>" + resolveHitRate.ToString("P1") + "</b><span>Resolve hit-rate (" + resolveHits + "/" + total + ")</span></div>"
+            + "<div class=\"k\"><b>" + fpHits + "</b><span>Fingerprint khop (bo re-style)</span></div>"
+            + "<div class=\"k\"><b>" + fpMisses + "</b><span>Fingerprint moi (tinh 1 lan)</span></div>"
+            + "<div class=\"k\"><b>" + scrollRestores + "</b><span>Scroll khoi phuc tuc thi</span></div>"
+            + "</div>"
+            + "<table><tr><th>URL</th><th>FP</th><th>Scroll</th><th>Seen</th></tr>"
+            + rows + "</table>" + cprSection + "</div></body></html>";
+    }
+
+    private static string HtmlEscape(string s) =>
+        s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
 }

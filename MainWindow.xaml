@@ -18,6 +18,7 @@
                     <Button x:Name="GoBtn" Content="Go" Width="48" Margin="4,0,0,0" Click="GoBtn_Click"/>
                     <Button x:Name="HistoryBtn" Content="History" Margin="4,0,0,0" Padding="10,0" Click="HistoryBtn_Click"/>
                     <Button x:Name="SettingsBtn" Content="⚙" Width="36" Margin="4,0,0,0" Click="SettingsBtn_Click" ToolTip="Settings"/>
+                    <Button x:Name="SentryBtn" Content="S" Width="36" Margin="4,0,0,0" Click="SentryBtn_Click" ToolTip="SENTRY: bật"/>
                     <Button x:Name="AboutBtn" Content="?" Width="36" Margin="4,0,0,0" Click="AboutBtn_Click" ToolTip="About"/>
                 </StackPanel>
                 <TextBox x:Name="AddressBar" Height="28" VerticalContentAlignment="Center"
