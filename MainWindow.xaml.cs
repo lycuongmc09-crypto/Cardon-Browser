@@ -14,6 +14,7 @@ public partial class MainWindow : Window
     private readonly PrismLedger _prism = new();
     private readonly SentryService _sentry = new();
     private readonly VitalsService _vitals = new();
+    private string? _pendingPauserId;
     private bool _expectHistoryNav;
     private DateTime _lastBfcacheAt = DateTime.MinValue;
     private string? _lastBfcacheReasons;
@@ -176,6 +177,7 @@ public partial class MainWindow : Window
         }
         // CPR replay: chèn preload của route đã học TRƯỚC khi navigate.
         _pendingPreloadId = null;
+        _pendingPauserId = null;
         bool replayUsed = false;
         try
         {
@@ -188,6 +190,15 @@ public partial class MainWindow : Window
             }
         }
         catch { _pendingPreloadId = null; replayUsed = false; }
+        // GPU layer 2: pauser cho video muted ngoài viewport (trừ site allowlisted).
+        try
+        {
+            if (Browser.CoreWebView2 != null
+                && MediaPauser.ShouldArm(url, _sentry.IsSiteAllowed(SentryService.HostOf(url))))
+                _pendingPauserId = await Browser.CoreWebView2
+                    .AddScriptToExecuteOnDocumentCreatedAsync(MediaPauser.Script);
+        }
+        catch { _pendingPauserId = null; }
         try { Browser.CoreWebView2?.Navigate(url); }
         catch { Browser.Source = new Uri(url); }
         _replayArmed = replayUsed;
@@ -203,10 +214,14 @@ public partial class MainWindow : Window
         // Chụp id vào biến cục bộ TRƯỚC delay: navigation mới đè id mới, không gỡ nhầm script của nó.
         string? preloadId = _pendingPreloadId;
         _pendingPreloadId = null;
+        string? pauserId = _pendingPauserId;
+        _pendingPauserId = null;
         try
         {
             if (preloadId != null && Browser.CoreWebView2 != null)
                 Browser.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(preloadId);
+            if (pauserId != null && Browser.CoreWebView2 != null)
+                Browser.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(pauserId);
         }
         catch { }
         if (Navigator.IsInternal(url)) return;

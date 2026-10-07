@@ -41,3 +41,12 @@ First-party không bao giờ block.
 Nút **S**: số đã chặn + tắt/bật theo site (`sentry.allow.json`).
 - Live test vnexpress (list mới): 495→286 requests (−42%), RAM 747→512MB (−32%), nội dung còn 99,1% (không vỡ trang).
 - Xem `docs/reports/Cardon-SENTRY-Report.html`.
+
+## 5. GPU — ít frame + tắt video nền (`Services/MediaPauser.cs`)
+GPU process to vì subframe quảng cáo chạy video/canvas. Xử lý 2 lớp:
+- Lớp 1 (xong): blocklist 6.3k làm sập 60→5 frames trên vnexpress (đo thật, recaptcha giữ lại đúng).
+- Lớp 2 (mới): pauser chèn mọi frame — pause video **muted ngoài viewport**, không động video có tiếng
+  (cần gesture nên là ý định user) và video trong viewport. Test synthetic: muted-offscreen paused ✓,
+  2 loại còn lại playing ✓. Site allowlisted thì không arm.
+- Không dùng `--disable-gpu` (đẩy việc sang CPU, tốn pin hơn). Không capping được GPU process từ host —
+  chỉ bớt việc cho nó.
