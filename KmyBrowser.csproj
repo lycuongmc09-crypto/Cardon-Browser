@@ -18,4 +18,9 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- web-vitals (Apache-2.0, GoogleChrome/web-vitals): đo LCP/CLS/INP thật trong page -->
+    <EmbeddedResource Include="Assets\web-vitals.iife.js" />
+  </ItemGroup>
+
 </Project>

@@ -13,6 +13,10 @@ public partial class MainWindow : Window
     private readonly CprStore _cpr = new();
     private readonly PrismLedger _prism = new();
     private readonly SentryService _sentry = new();
+    private readonly VitalsService _vitals = new();
+    private bool _expectHistoryNav;
+    private DateTime _lastBfcacheAt = DateTime.MinValue;
+    private string? _lastBfcacheReasons;
     private string? _pendingPreloadId;
     private readonly ReuseGraph _reuse = new(50);
     private readonly ComputationCache<string, string> _resolveCache = new(200);
@@ -32,6 +36,7 @@ public partial class MainWindow : Window
         _history.Load();
         _cpr.Load();
         _prism.Load();
+        _vitals.Load();
         try
         {
             await Browser.EnsureCoreWebView2Async();
@@ -65,6 +70,7 @@ public partial class MainWindow : Window
             await ReuseOrLearnAsync(url);
             await CprCollectAsync(url, navMs);
             await PrismMeasureAsync(url);
+            await CdpMeasureAsync(url);
         };
         Browser.SourceChanged += (_, _) =>
         {
@@ -80,6 +86,44 @@ public partial class MainWindow : Window
             Browser.CoreWebView2.WebResourceResponseReceived += Sentry_OnResponse;
         }
         catch { /* không hook được thì duyệt thường */ }
+
+        // Quan trắc: CDP metrics + bfcache events + web-vitals bridge (1 lần).
+        try
+        {
+            await Browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Performance.enable", "{}");
+            await Browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Page.enable", "{}");
+            var bfcacheRecv = Browser.CoreWebView2.GetDevToolsProtocolEventReceiver("Page.backForwardCacheNotUsed");
+            bfcacheRecv.DevToolsProtocolEventReceived += (_, ev) =>
+            {
+                try
+                {
+                    _lastBfcacheReasons = string.Join(",", VitalsService.ParseBfcacheReasons(ev.ParameterObjectAsJson));
+                    _lastBfcacheAt = DateTime.Now;
+                }
+                catch { }
+            };
+        }
+        catch { }
+        try
+        {
+            string lib = VitalsService.LoadWebVitalsLib();
+            if (lib.Length > 0)
+                await Browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(lib + VitalsService.BridgePrefix);
+            Browser.WebMessageReceived += (_, em) =>
+            {
+                try
+                {
+                    var parsed = VitalsService.ParseVitalMessage(em.TryGetWebMessageAsString());
+                    if (parsed is { } p && p.url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _vitals.NoteVital(p.url, p.name, p.value);
+                        _vitals.Save();
+                    }
+                }
+                catch { }
+            };
+        }
+        catch { }
 
         NavigateHome();
     }
@@ -126,7 +170,7 @@ public partial class MainWindow : Window
             Browser.NavigateToString(Pages.CachePage(
                 _resolveCache.HitRate, _resolveCache.Hits, _resolveCache.Misses,
                 _reuse.FingerprintHits, _reuse.FingerprintMisses, _reuse.ScrollRestores,
-                _reuse.Snapshot(), BuildCprSection() + BuildSentrySection()));
+                _reuse.Snapshot(), BuildCprSection() + BuildSentrySection() + BuildVitalsSection()));
             AddressBar.Text = Navigator.CacheUri;
             return;
         }
@@ -182,6 +226,48 @@ public partial class MainWindow : Window
         catch { }
     }
 
+    private async Task<string?> CdpCallAsync(string method, string pars, int timeoutMs = 1500)
+    {
+        try
+        {
+            if (Browser.CoreWebView2 == null) return null;
+            var t = Browser.CoreWebView2.CallDevToolsProtocolMethodAsync(method, pars);
+            if (await Task.WhenAny(t, Task.Delay(timeoutMs)) != t) return null;
+            return await t;
+        }
+        catch { return null; }
+    }
+
+    // Đo CDP sau load: nodes/jsHeap/layout + bfcache hit/miss cho history-nav.
+    // Heuristic bfcache: event chỉ bắn khi MISS; history-nav xong mà không event gần đó => HIT.
+    private async Task CdpMeasureAsync(string url)
+    {
+        if (Navigator.IsInternal(url) || Browser.CoreWebView2 == null) return;
+        try
+        {
+            string? m = await CdpCallAsync("Performance.getMetrics", "{}");
+            double layout = -1, jsHeap = 0;
+            if (m != null)
+            {
+                var d = VitalsService.ParseMetrics(m);
+                d.TryGetValue("LayoutCount", out layout);
+                d.TryGetValue("JSHeapUsedSize", out jsHeap);
+            }
+            string? dc = await CdpCallAsync("Memory.getDOMCounters", "{}");
+            int nodes = 0;
+            if (dc != null) (nodes, _) = VitalsService.ParseDomCounters(dc);
+            _vitals.NoteCdp(url, nodes, (long)jsHeap, layout);
+            if (_expectHistoryNav)
+            {
+                _expectHistoryNav = false;
+                bool miss = _lastBfcacheReasons != null
+                    && (DateTime.Now - _lastBfcacheAt).TotalSeconds < 5;
+                _vitals.NoteBfcache(url, !miss, miss ? _lastBfcacheReasons ?? "" : "");
+            }
+            _vitals.Save();
+        }
+        catch { }
+    }
     private string BuildCprSection()
     {
         var sb = new System.Text.StringBuilder(
@@ -365,15 +451,39 @@ public partial class MainWindow : Window
         catch { }
     }
 
+    private string BuildVitalsSection()
+    {
+        var sb = new System.Text.StringBuilder(
+            "<h2 style=\"margin:18px 0 8px;font-size:16px\">Web Vitals + CDP (do that trong page)</h2>"
+            + "<div style=\"font-size:12px;opacity:.7\">LCP/CLS/INP tu web-vitals.js; nodes/jsHeap/layout tu CDP. "
+            + "bfcache: event chi ban khi MISS — history-nav khong event gan do thi tinh HIT (heuristic).</div>"
+            + "<table><tr><th>Route</th><th>LCP</th><th>CLS</th><th>INP</th><th>Nodes</th><th>JSHeap</th><th>bfcache h/m</th></tr>");
+        foreach (var (route, v) in _vitals.Snapshot())
+        {
+            string r = route.Length > 40 ? route.Substring(0, 40) + "..." : route;
+            string inp = v.InpMs <= 0 ? "-" : v.InpMs.ToString("F0") + "ms";
+            sb.Append("<tr><td>").Append(System.Net.WebUtility.HtmlEncode(r)).Append("</td><td>")
+              .Append(v.LcpMs > 0 ? v.LcpMs.ToString("F0") + "ms" : "-").Append("</td><td>")
+              .Append(v.Cls > 0 ? v.Cls.ToString("F3") : "-").Append("</td><td>")
+              .Append(inp).Append("</td><td>").Append(v.Nodes).Append("</td><td>")
+              .Append(v.JsHeapBytes > 0 ? (v.JsHeapBytes / 1048576.0).ToString("F1") + "MB" : "-")
+              .Append("</td><td>").Append(v.BfcacheHits).Append("/").Append(v.BfcacheMiss)
+              .Append(string.IsNullOrEmpty(v.LastBfcacheReasons) ? "" : " (" + System.Net.WebUtility.HtmlEncode(v.LastBfcacheReasons) + ")")
+              .Append("</td></tr>");
+        }
+        sb.Append("</table>");
+        return sb.ToString();
+    }
+
     private void GoBtn_Click(object sender, RoutedEventArgs e) => GoFromBar();
     private void AddressBar_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter) GoFromBar();
     }
     private void BackBtn_Click(object sender, RoutedEventArgs e)
-    { try { if (Browser.CanGoBack) Browser.GoBack(); } catch { } }
+    { try { if (Browser.CanGoBack) { _expectHistoryNav = true; Browser.GoBack(); } } catch { } }
     private void FwdBtn_Click(object sender, RoutedEventArgs e)
-    { try { if (Browser.CanGoForward) Browser.GoForward(); } catch { } }
+    { try { if (Browser.CanGoForward) { _expectHistoryNav = true; Browser.GoForward(); } } catch { } }
     private void ReloadBtn_Click(object sender, RoutedEventArgs e)
     { try { Browser.Reload(); } catch { } }
     private void HomeBtn_Click(object sender, RoutedEventArgs e) => NavigateHome();

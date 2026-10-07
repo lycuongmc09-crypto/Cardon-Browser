@@ -1,5 +1,15 @@
 # Cardon — Thuật toán tăng tốc (ghi chú kỹ thuật, tiếng Việt)
 
+## 0. Quan trắc (đo thật, không ước)
+- `Services/VitalsService.cs`: LCP/CLS/INP thật từ web-vitals.js v4 (Apache-2.0, kèm trong
+  assembly), nodes/jsHeap/layout từ CDP (`Performance.getMetrics`, `Memory.getDOMCounters`),
+  bfcache hit/miss từ event `Page.backForwardCacheNotUsed` (method query không tồn tại trên
+  Chromium thực tế — đã verify). Xem ở `cardon://cache`.
+- RAM renderer thật (probe Chromium cùng engine, order-balanced n=2):
+  vnexpress −28% (745→538MB), dantri −17% (516→427MB), tuoitre −2%, google 0% (trang sạch,
+  đúng là không có gì để chặn). Đo cả browser process headless-shell nên số tuyệt đối cao;
+  hướng và tỉ lệ mới là điều đáng đọc.
+
 ## 1. Reuse Graph — trí nhớ ngắn hạn
 Cache kết quả tính toán trong RAM (`Services/ComputationCache.cs` — LRU):
 - Resolve input→URL, HTML trang nội bộ (build 1 lần).
