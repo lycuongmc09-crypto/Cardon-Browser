@@ -185,8 +185,37 @@ public sealed class CprStore
         }
     }
 
-    public void NoteTiming(string pageUrl, double elapsedMs, bool replayUsed)
+    // Seed từ PerfList: HitRate đã bị cap dưới cổng bên gọi. Resource đã có mà seed cao hơn thì nâng.
+    public int ImportSeed(string route, List<(string url, string kind, int depth, double hit, int bytes)> seeds)
     {
+        lock (_lock)
+        {
+            if (!_routes.TryGetValue(route, out var rd))
+            {
+                if (_routes.Count >= MaxRoutes) return 0;
+                rd = new RouteData();
+                _routes[route] = rd;
+            }
+            int n = 0;
+            foreach (var s in seeds)
+            {
+                if (rd.Resources.TryGetValue(s.url, out var old))
+                {
+                    if (s.hit > old.HitRate)
+                        rd.Resources[s.url] = old with { HitRate = s.hit };
+                }
+                else
+                {
+                    if (rd.Resources.Count >= MaxResPerRoute) continue;
+                    rd.Resources[s.url] = new Res(s.url, s.kind, s.depth, s.hit, Math.Max(0, s.bytes));
+                    n++;
+                }
+            }
+            return n;
+        }
+    }
+
+    public void NoteTiming(string pageUrl, double elapsedMs, bool replayUsed)    {
         string route = NormalizeRoute(pageUrl);
         lock (_lock)
         {

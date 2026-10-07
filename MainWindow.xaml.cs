@@ -25,12 +25,17 @@ public partial class MainWindow : Window
     private readonly ComputationCache<string, string> _resolveCache = new(200);
     private readonly ComputationCache<string, string> _pageCache = new(8);
     private readonly Stopwatch _navWatch = new();
+    private (int routes, int res, int heights) _perfImport;
 
     public MainWindow()
     {
         InitializeComponent();
         Loaded += MainWindow_Loaded;
-        Closing += (_, _) => { try { _history.Flush(); } catch { } };
+        Closing += (_, _) =>
+        {
+            try { _history.Flush(); } catch { }
+            try { PerfList.ExportTo(_cpr.Snapshot(), _prism.Snapshot(), PerfList.DefaultExportPath()); } catch { }
+        };
         // Kiểu Brave Memory Saver cho single-view: minimize => Chromium thả RAM, mở lại => bình thường.
         StateChanged += (_, _) =>
         {
@@ -52,6 +57,7 @@ public partial class MainWindow : Window
         _cpr.Load();
         _prism.Load();
         _vitals.Load();
+        _perfImport = PerfList.ImportFrom(PerfList.DefaultImportPath(), _cpr, _prism);
         try
         {
             await Browser.EnsureCoreWebView2Async();
@@ -193,7 +199,7 @@ public partial class MainWindow : Window
             Browser.NavigateToString(Pages.CachePage(
                 _resolveCache.HitRate, _resolveCache.Hits, _resolveCache.Misses,
                 _reuse.FingerprintHits, _reuse.FingerprintMisses, _reuse.ScrollRestores,
-                _reuse.Snapshot(), BuildCprSection() + BuildSentrySection() + BuildVitalsSection()));
+                _reuse.Snapshot(), BuildCprSection() + BuildSentrySection() + BuildVitalsSection() + BuildPerfSection()));
             AddressBar.Text = Navigator.CacheUri;
             return;
         }
@@ -561,8 +567,16 @@ public partial class MainWindow : Window
         return sb.ToString();
     }
 
-    private void GoBtn_Click(object sender, RoutedEventArgs e) => GoFromBar();
-    private void AddressBar_KeyDown(object sender, KeyEventArgs e)
+    // PerfList v0 — tri thức chia sẻ: export khi thoát, import khi mở.
+    private string BuildPerfSection()
+    {
+        return "<h2 style=\"margin:18px 0 8px;font-size:16px\">PerfList (tri thức chia sẻ)</h2>"
+            + $"<div style=\"font-size:12.5px\">Import lúc mở: <b>{_perfImport.routes}</b> routes, "
+            + $"<b>{_perfImport.res}</b> resources, <b>{_perfImport.heights}</b> heights. "
+            + "Seed dưới cổng — cần 1 lần ghé thật để xác nhận. Export tự động khi thoát app.</div>";
+    }
+
+    private void GoBtn_Click(object sender, RoutedEventArgs e) => GoFromBar();    private void AddressBar_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter) GoFromBar();
     }

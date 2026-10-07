@@ -118,6 +118,30 @@ public sealed class PrismLedger
         }
     }
 
+    // Seed heights từ PerfList: chỉ thêm fp chưa có (local đã học thì local thắng).
+    public int ImportSeed(string route, List<(string fp, double height)> seeds)
+    {
+        lock (_lock)
+        {
+            if (!_routes.TryGetValue(route, out var rl))
+            {
+                if (_routes.Count >= MaxRoutes) return 0;
+                rl = new RouteLedger();
+                _routes[route] = rl;
+            }
+            int n = 0;
+            foreach (var (fp, h) in seeds)
+            {
+                if (string.IsNullOrWhiteSpace(fp) || h <= 0) continue;
+                if (rl.Segments.ContainsKey(fp)) continue;
+                if (rl.Segments.Count >= MaxSegPerRoute) continue;
+                rl.Segments[fp] = new SegmentGeo { HeightEwma = h, Visits = 1 };
+                n++;
+            }
+            return n;
+        }
+    }
+
     public double? HeightFor(string route, string fp)
     {
         lock (_lock)

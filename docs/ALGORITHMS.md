@@ -63,7 +63,17 @@ GPU process to vì subframe quảng cáo chạy video/canvas. Xử lý 2 lớp:
 - Không dùng `--disable-gpu` (đẩy việc sang CPU, tốn pin hơn). Không capping được GPU process từ host —
   chỉ bớt việc cho nó.
 
-## 7. Data Saver kiểu client (không cần server như Opera Mini)
+## 7. PerfList v0 — "EasyList cho performance" (mới)
+Xuất tri thức máy này thành file JSON chia sẻ được (`Services/PerfList.cs`):
+`perflist-export.json` gồm resources (url/kind/depth/hit/bytes) + heights theo route.
+Máy mới import (`perflist-import.json`) là có ngay tri thức — xóa cold-start.
+- Chống đầu độc: seed HitRate capped 0,79 (dưới cổng 0,8) — cần đúng 1 lần ghé thật để xác nhận.
+  Heights vô hại nên seed thẳng. Blocklist không share (tránh poison).
+- Tự động: export khi thoát app, import khi mở, thống kê ở `cardon://cache`.
+- Chứng minh bằng test: máy B chưa ghé lần nào → import → 0 preload → 1 lần ghé → có preload ngay
+  (không import thì phải học đủ 4 lần).
+
+## 8. Data Saver kiểu client (không cần server như Opera Mini)
 Opera Mini nén 90% nhờ proxy server farm (OBML + recompress ảnh + chạy JS hộ) — đổi lại mất mã hóa
 đầu-cuối trên HTTPS và tốn hạ tầng. Cardon không có farm nên không bắt chước; làm phần client miễn phí:
 - Header `Save-Data: on` mọi request (server/CDN nào hỗ trợ sẽ trả bản nhẹ: ảnh nhỏ, không font).
