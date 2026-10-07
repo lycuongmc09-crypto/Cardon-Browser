@@ -230,13 +230,13 @@ public partial class MainWindow : Window
             }
         }
         catch { _pendingPreloadId = null; replayUsed = false; }
-        // GPU layer 2: pauser cho video muted ngoài viewport (trừ site allowlisted).
+        // GPU layer 2 + lazy media: 1 script duy nhất (pauser + lazy images/iframes).
         try
         {
             if (Browser.CoreWebView2 != null
                 && MediaPauser.ShouldArm(url, _sentry.IsSiteAllowed(SentryService.HostOf(url))))
                 _pendingPauserId = await Browser.CoreWebView2
-                    .AddScriptToExecuteOnDocumentCreatedAsync(MediaPauser.Script);
+                    .AddScriptToExecuteOnDocumentCreatedAsync(MediaPauser.Script + MediaPauser.LazyImages);
         }
         catch { _pendingPauserId = null; }
         try { Browser.CoreWebView2?.Navigate(url); }
@@ -396,6 +396,7 @@ public partial class MainWindow : Window
                 }
             }
             // Cắt Referer cross-origin còn origin (giữ same-origin nguyên).
+            // + Save-Data: báo server gửi bản nhẹ (ảnh nhỏ, không font/autoplay) nếu họ hỗ trợ.
             try
             {
                 string? refh = null;
@@ -405,6 +406,7 @@ public partial class MainWindow : Window
                     string? trimmed = ShieldUrls.TrimReferer(e.Request.Uri, Browser.Source?.ToString() ?? "");
                     if (trimmed != null) e.Request.Headers.SetHeader("Referer", trimmed);
                 }
+                try { e.Request.Headers.SetHeader("Save-Data", "on"); } catch { }
             }
             catch { }
         }

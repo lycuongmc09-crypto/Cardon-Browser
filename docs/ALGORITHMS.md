@@ -62,3 +62,12 @@ GPU process to vì subframe quảng cáo chạy video/canvas. Xử lý 2 lớp:
   2 loại còn lại playing ✓. Site allowlisted thì không arm.
 - Không dùng `--disable-gpu` (đẩy việc sang CPU, tốn pin hơn). Không capping được GPU process từ host —
   chỉ bớt việc cho nó.
+
+## 7. Data Saver kiểu client (không cần server như Opera Mini)
+Opera Mini nén 90% nhờ proxy server farm (OBML + recompress ảnh + chạy JS hộ) — đổi lại mất mã hóa
+đầu-cuối trên HTTPS và tốn hạ tầng. Cardon không có farm nên không bắt chước; làm phần client miễn phí:
+- Header `Save-Data: on` mọi request (server/CDN nào hỗ trợ sẽ trả bản nhẹ: ảnh nhỏ, không font).
+  Đã verify header đi thật qua httpbin echo.
+- Chèn `loading=lazy` + `decoding=async` cho ảnh/iframe dưới sâu chưa có thuộc tính (chung 1 script
+  với MediaPauser). Trung thực: preload scanner thường đi trước observer nên chỉ cứu một phần —
+  đo thật vnexpress (vốn đã lazy sẵn): −4,8% bytes ban đầu (~19KB). Trang không lazy sẵn hưởng nhiều hơn.
