@@ -125,16 +125,6 @@ public sealed class PrismLedger
                 ? g.HeightEwma : null;
     }
 
-    public (int routes, int segs, int eligible, long deferredBytes, int visits) Stats()
-    {
-        lock (_lock)
-        {
-            int segs = _routes.Values.Sum(r => r.Segments.Count);
-            int visits = _routes.Values.Sum(r => r.Visits);
-            return (_routes.Count, segs, 0, 0, visits);
-        }
-    }
-
     public List<(string route, RouteLedger data)> Snapshot()
     {
         lock (_lock)

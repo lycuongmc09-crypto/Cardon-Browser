@@ -14,7 +14,6 @@ public sealed class ReuseGraph
     private readonly int _capacity;
     private readonly Dictionary<string, PageReuse> _byUrl = new(StringComparer.OrdinalIgnoreCase);
     private readonly LinkedList<string> _lru = new();
-    private readonly HashSet<string> _styledFingerprints = new();
     private readonly object _lock = new();
 
     public int FingerprintHits { get; private set; }
@@ -86,18 +85,6 @@ JSON.stringify({ x: Math.round(window.scrollX || 0), y: Math.round(window.scroll
                 _byUrl.Remove(_lru.Last.Value);
                 _lru.RemoveLast();
             }
-        }
-    }
-
-    // Đánh dấu fingerprint đã được style/inject => lần sau khớp thì skip.
-    public bool ShouldSkipStyling(string fingerprint)
-    {
-        lock (_lock)
-        {
-            if (_styledFingerprints.Contains(fingerprint)) return true;
-            _styledFingerprints.Add(fingerprint);
-            if (_styledFingerprints.Count > 500) _styledFingerprints.Clear();
-            return false;
         }
     }
 

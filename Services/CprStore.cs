@@ -157,8 +157,10 @@ public sealed class CprStore
             foreach (var (url, initiator, bytes) in entries)
             {
                 if (!url.StartsWith("http", StringComparison.OrdinalIgnoreCase)) continue;
-                if (seen.Contains(url) || rd.Resources.Count >= MaxResPerRoute + seen.Count) continue;
+                if (seen.Contains(url)) continue;
                 seen.Add(url);
+                // Cap cứng: route mới học ồ ạt cũng không vượt MaxResPerRoute.
+                if (!rd.Resources.ContainsKey(url) && rd.Resources.Count >= MaxResPerRoute) continue;
                 int depth = ApproxDepth(initiator);
                 string kind = Classify(url, initiator);
                 if (rd.Resources.TryGetValue(url, out var old))

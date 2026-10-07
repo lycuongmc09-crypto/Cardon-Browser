@@ -43,7 +43,7 @@ code{background:rgba(245,158,11,.15);color:#fcd34d;padding:2px 8px;border-radius
 <div class="tile"><b>History file</b>Lưu JSON bền vững, tìm kiếm nhanh, mở lại 1 click đúp.</div>
 <div class="tile"><b>Settings</b>Đổi engine tìm kiếm + trang chủ theo gu của bạn.</div>
 </div>
-<div class="hint">Trang nội bộ: <code>cardon://dashboard</code> &nbsp; <code>cardon://about</code> &nbsp; <code>about:blank</code></div>
+<div class="hint">Trang nội bộ: <code>cardon://dashboard</code> &nbsp; <code>cardon://about</code> &nbsp; <code>cardon://cache</code> &nbsp; <code>about:blank</code></div>
 </div></body></html>
 """;
 

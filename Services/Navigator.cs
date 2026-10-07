@@ -25,6 +25,20 @@ public static class Navigator
         return url;
     }
 
+    // So sánh 2 URL có phải cùng trang (bỏ fragment + '/' cuối) — dùng để phát hiện
+    // user đã navigate đi nơi khác trong lúc collect async (tránh học nhầm trang).
+    public static bool SamePage(string a, string b)
+    {
+        static string norm(string u)
+        {
+            u = (u ?? "").Trim();
+            int h = u.IndexOf('#');
+            if (h >= 0) u = u[..h];
+            return u.TrimEnd('/').Trim();
+        }
+        return string.Equals(norm(a), norm(b), StringComparison.OrdinalIgnoreCase);
+    }
+
     // Input -> URL: giữ nguyên http(s), domain tự thêm https://, còn lại search.
     public static string ResolveInputToUrl(string input, SettingsService settings)
     {

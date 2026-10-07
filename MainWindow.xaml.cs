@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         Loaded += MainWindow_Loaded;
+        Closing += (_, _) => { try { _history.Flush(); } catch { } };
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -155,17 +156,21 @@ public partial class MainWindow : Window
     {
         bool used = _replayArmed;
         _replayArmed = false;
+        // Chụp id vào biến cục bộ TRƯỚC delay: navigation mới đè id mới, không gỡ nhầm script của nó.
+        string? preloadId = _pendingPreloadId;
+        _pendingPreloadId = null;
         try
         {
-            if (_pendingPreloadId != null && Browser.CoreWebView2 != null)
-                Browser.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(_pendingPreloadId);
+            if (preloadId != null && Browser.CoreWebView2 != null)
+                Browser.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(preloadId);
         }
         catch { }
-        finally { _pendingPreloadId = null; }
         if (Navigator.IsInternal(url)) return;
         try
         {
             await Task.Delay(2000);
+            // User đã navigate đi nơi khác trong lúc chờ => bỏ, tránh học nhầm trang.
+            if (!Navigator.SamePage(Browser.Source?.ToString() ?? "", url)) return;
             var t = Browser.ExecuteScriptAsync(CprJs.CollectJs);
             if (await Task.WhenAny(t, Task.Delay(1500)) != t) return;
             var (rtt, entries) = CprJs.ParseCollect(await t);
@@ -319,8 +324,7 @@ public partial class MainWindow : Window
 
             if (_reuse.Matches(url, fp))
             {
-                // 95% DOM giống nhau => không tính lại: skip styling, restore scroll.
-                _reuse.ShouldSkipStyling(fp);
+                // 95% DOM giống nhau => không tính lại: chỉ restore scroll.
                 if (_reuse.TryGet(url, out var cached) && cached is not null &&
                     (cached.ScrollX != 0 || cached.ScrollY != 0))
                 {
@@ -389,7 +393,4 @@ public partial class MainWindow : Window
         w.Owner = this;
         w.ShowDialog();
     }
-
-    // Cho HistoryWindow double-click dùng chung
-    public void NavigatePublic(string url) => NavigateTo(url);
 }
