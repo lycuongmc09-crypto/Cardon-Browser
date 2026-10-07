@@ -34,8 +34,10 @@ persist `prism.json`). Fingerprint = tag + class + bucket text (block lặp tác
 - Xem `docs/reports/Cardon-PRISM-Report.html`. P2 mới cắt HTML + Byte Pool.
 
 ## 4. SENTRY Bước 1 — FILTER mạng
-1 verdict Block/Allow cho mọi request (`Services/SentryService.cs`), ~3µs/lần, fail-open.
-Blocklist ~72 tracker/ads (không gồm tag-manager/consent). First-party không bao giờ block.
+1 verdict Block/Allow cho mọi request (`Services/SentryService.cs` + `Services/SentryLists.cs`), ~3µs/lần, fail-open.
+Blocklist ~6.300 domain (EasyList/EasyPrivacy curate: chỉ rule third-party/bare-adserver, bỏ domain
+nhạy cảm login/pay, bỏ subdomain bị bao phủ; không gồm tag-manager/consent để khỏi vỡ trang).
+First-party không bao giờ block.
 Nút **S**: số đã chặn + tắt/bật theo site (`sentry.allow.json`).
-- Live test (báo VN): vnexpress 483→326, dantri 241→164, tuoitre 367→281 requests.
+- Live test vnexpress (list mới): 495→286 requests (−42%), RAM 747→512MB (−32%), nội dung còn 99,1% (không vỡ trang).
 - Xem `docs/reports/Cardon-SENTRY-Report.html`.

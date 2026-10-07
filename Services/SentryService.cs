@@ -59,6 +59,9 @@ public sealed class SentryService
             var t = d.Trim();
             if (t.Length > 0) _blocked.Add(t);
         }
+        // List EasyList/EasyPrivacy đã curate (~6.2k domain). Lookup vẫn O(số label),
+        // không phụ thuộc kích thước list nên verdict giữ nguyên <0.2ms.
+        foreach (var d in SentryLists.Generated) _blocked.Add(d);
         LoadUserFiles();
     }
 
