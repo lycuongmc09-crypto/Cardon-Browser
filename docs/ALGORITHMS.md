@@ -42,6 +42,18 @@ Nút **S**: số đã chặn + tắt/bật theo site (`sentry.allow.json`).
 - Live test vnexpress (list mới): 495→286 requests (−42%), RAM 747→512MB (−32%), nội dung còn 99,1% (không vỡ trang).
 - Xem `docs/reports/Cardon-SENTRY-Report.html`.
 
+## 6. Brave Shields — phần host làm được (`Services/ShieldUrls.cs`)
+Tham khảo Brave nhưng trung thực về giới hạn: cookie/fingerprint/script-blocking cần patch
+renderer nên Cardon KHÔNG làm. Chỉ làm 4 món host-side, fail-open:
+- **Strip query tracker** (~50 param utm_*/fbclid/gclid...): navigation mình gọi thì làm sạch trước;
+  document từ link ngoài thì 302 về URL sạch (chỉ redirect khi URL đổi nên không lặp).
+- **Debounce**: google `/url?q=`, facebook `l.php?u=` đi thẳng đích, khỏi bounce-tracker set cookie.
+  Short-link (bit.ly...) không đoán — để nguyên.
+- **HTTPS upgrade**: `http://` → thử `https://` trước, lỗi thì về `http` đúng 1 lần (chống lặp bằng cờ).
+- **Referer**: cross-origin cắt còn origin, same-origin giữ nguyên (tránh vỡ hotlink/CSRF check).
+- **Memory Saver kiểu single-view**: minimize cửa sổ → `MemoryUsageTargetLevel.Low`, mở lại → Normal.
+- Live verify: httpbin chỉ nhận `page=2` sau strip; strip không lặp/không vỡ trang.
+
 ## 5. GPU — ít frame + tắt video nền (`Services/MediaPauser.cs`)
 GPU process to vì subframe quảng cáo chạy video/canvas. Xử lý 2 lớp:
 - Lớp 1 (xong): blocklist 6.3k làm sập 60→5 frames trên vnexpress (đo thật, recaptcha giữ lại đúng).

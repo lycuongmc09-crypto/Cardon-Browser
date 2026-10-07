@@ -15,6 +15,8 @@ public partial class MainWindow : Window
     private readonly SentryService _sentry = new();
     private readonly VitalsService _vitals = new();
     private string? _pendingPauserId;
+    private readonly Dictionary<string, string> _httpsFallback = new(StringComparer.OrdinalIgnoreCase);
+    private string _lastNavUrl = "";
     private bool _expectHistoryNav;
     private DateTime _lastBfcacheAt = DateTime.MinValue;
     private string? _lastBfcacheReasons;
@@ -29,6 +31,18 @@ public partial class MainWindow : Window
         InitializeComponent();
         Loaded += MainWindow_Loaded;
         Closing += (_, _) => { try { _history.Flush(); } catch { } };
+        // Kiểu Brave Memory Saver cho single-view: minimize => Chromium thả RAM, mở lại => bình thường.
+        StateChanged += (_, _) =>
+        {
+            try
+            {
+                if (Browser.CoreWebView2 == null) return;
+                Browser.CoreWebView2.MemoryUsageTargetLevel = WindowState == WindowState.Minimized
+                    ? CoreWebView2MemoryUsageTargetLevel.Low
+                    : CoreWebView2MemoryUsageTargetLevel.Normal;
+            }
+            catch { }
+        };
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -57,10 +71,18 @@ public partial class MainWindow : Window
             _navWatch.Restart();
             _ = SaveScrollBestEffortAsync();
         };
-        Browser.NavigationCompleted += async (_, _) =>
+        Browser.NavigationCompleted += async (_, ce) =>
         {
             LoadingBar.Visibility = Visibility.Collapsed;
             var url = Browser.Source?.ToString() ?? "";
+            // HTTPS upgrade thất bại => về http gốc 1 lần (không vòng lặp: fallback không upgrade lại).
+            if (!ce.IsSuccess && _httpsFallback.TryGetValue(_lastNavUrl, out var httpBack))
+            {
+                _httpsFallback.Remove(_lastNavUrl);
+                NavigateTo(httpBack, allowUpgrade: false);
+                return;
+            }
+            _httpsFallback.Remove(_lastNavUrl);
             AddressBar.Text = url;
             if (!Navigator.IsInternal(url))
                 _history.Add(Browser.CoreWebView2?.DocumentTitle ?? url, url);
@@ -148,7 +170,7 @@ public partial class MainWindow : Window
         else NavigateTo(Navigator.DashboardUri);
     }
 
-    private async void NavigateTo(string url)
+    private async void NavigateTo(string url, bool allowUpgrade = true)
     {
         url = Navigator.NormalizeInternal(url);
         if (url == Navigator.DashboardUri)
@@ -174,6 +196,24 @@ public partial class MainWindow : Window
                 _reuse.Snapshot(), BuildCprSection() + BuildSentrySection() + BuildVitalsSection()));
             AddressBar.Text = Navigator.CacheUri;
             return;
+        }
+        // Brave-style: debounce bounce-tracker -> strip param tracker -> https upgrade.
+        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            string? direct = ShieldUrls.TryDebounce(url);
+            if (direct != null) url = direct;
+            url = ShieldUrls.StripTrackingParams(url);
+            if (allowUpgrade)
+            {
+                string? https = ShieldUrls.TryUpgradeHttps(url);
+                if (https != null)
+                {
+                    if (_httpsFallback.Count > 50) _httpsFallback.Clear();
+                    _httpsFallback[https] = url;
+                    url = https;
+                }
+            }
         }
         // CPR replay: chèn preload của route đã học TRƯỚC khi navigate.
         _pendingPreloadId = null;
@@ -201,6 +241,7 @@ public partial class MainWindow : Window
         catch { _pendingPauserId = null; }
         try { Browser.CoreWebView2?.Navigate(url); }
         catch { Browser.Source = new Uri(url); }
+        _lastNavUrl = url;
         _replayArmed = replayUsed;
     }
 
@@ -336,8 +377,36 @@ public partial class MainWindow : Window
             string topHost = SentryService.HostOf(Browser.Source?.ToString() ?? "");
             var v = _sentry.Decide(e.Request.Uri, topHost, out _);
             if (v == SentryService.Verdict.Block && Browser.CoreWebView2 != null)
+            {
                 e.Response = Browser.CoreWebView2.Environment.CreateWebResourceResponse(
                     null, 204, "Blocked by SENTRY", "Content-Type: text/plain\r\n");
+                return;
+            }
+            // Brave-style: document dính param tracker (từ link ngoài) => 302 về URL sạch.
+            // Chỉ redirect khi URL đổi thật nên không bao giờ lặp.
+            if (e.ResourceContext == CoreWebView2WebResourceContext.Document
+                && Browser.CoreWebView2 != null)
+            {
+                string cleaned = ShieldUrls.StripTrackingParams(e.Request.Uri);
+                if (!string.Equals(cleaned, e.Request.Uri, StringComparison.Ordinal))
+                {
+                    e.Response = Browser.CoreWebView2.Environment.CreateWebResourceResponse(
+                        null, 302, "Found", "Location: " + cleaned + "\r\n");
+                    return;
+                }
+            }
+            // Cắt Referer cross-origin còn origin (giữ same-origin nguyên).
+            try
+            {
+                string? refh = null;
+                try { refh = e.Request.Headers.GetHeader("Referer"); } catch { }
+                if (refh != null)
+                {
+                    string? trimmed = ShieldUrls.TrimReferer(e.Request.Uri, Browser.Source?.ToString() ?? "");
+                    if (trimmed != null) e.Request.Headers.SetHeader("Referer", trimmed);
+                }
+            }
+            catch { }
         }
         catch { }
     }
